@@ -18,6 +18,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 
 public final class JDAListener extends ListenerAdapter {
     JDA jda;
@@ -28,6 +29,8 @@ public final class JDAListener extends ListenerAdapter {
     ServerInfo dSMPServer;
     ProxyServer proxyServer;
     String embedFooter = "Made by hopperelec#3060";
+    LinkedHashMap<Pattern,String> discordToMinecraftPatterns = new LinkedHashMap<>();
+    Pattern removeResetPattern;
 
     public JDAListener(JDA jda) {
         this.jda = jda;
@@ -51,10 +54,18 @@ public final class JDAListener extends ListenerAdapter {
         embed.setFooter("Made by hopperelec#3060");
         stockblockGuildChannel.sendMessage("<@&868872369631019049>").setEmbeds(embed.build()).queue();
         dSMPGuildChannel.sendMessage("<@&868703367688519761>").setEmbeds(embed.build()).queue();
+
+        discordToMinecraftPatterns.put(Pattern.compile("\\*\\*(.*?)\\*\\*"), "l");
+        discordToMinecraftPatterns.put(Pattern.compile("\\*(.*?)\\*"), "o");
+        discordToMinecraftPatterns.put(Pattern.compile("__(.*?)__"), "n");
+        discordToMinecraftPatterns.put(Pattern.compile("~~(.*?)~~"), "m");
+        discordToMinecraftPatterns.put(Pattern.compile("`(.*?)`"), "7");
+        removeResetPattern = Pattern.compile("(§r)+");
     }
 
     public String discordToMinecraftFormat(String discordMsg) {
-        return discordMsg.replaceAll("\\*\\*(.*?)\\*\\*", "§l$1§r").replaceAll("\\*(.*?)\\*", "§o$1§r").replaceAll("__(.*?)__", "§n$1§r").replaceAll("~~(.*?)~~", "§m$1§r").replaceAll("`(.*?)`", "§7$1§f").replaceAll("(§r){1,5}","§r");
+        for (Map.Entry<Pattern,String> entry : discordToMinecraftPatterns.entrySet()) discordMsg = entry.getKey().matcher(discordMsg).replaceAll(entry.getValue());
+        return discordMsg;
     }
 
     public String getDiscordName(User user) {
@@ -80,7 +91,9 @@ public final class JDAListener extends ListenerAdapter {
             String replyAuthor = getDiscordName(reply.getAuthor());
             if (replyAuthor.equals("StockBlock#3858")) {
                 MessageEmbed embed = reply.getEmbeds().get(0);
-                replyAuthor = embed.getAuthor().getName();
+                MessageEmbed.AuthorInfo authorInfo = embed.getAuthor();
+                if (authorInfo == null) replyAuthor = "StockBlock bot";
+                else replyAuthor = embed.getAuthor().getName();
                 replyTitle = embed.getTitle();
             } else replyTitle = discordToMinecraftFormat(reply.getContentDisplay());
 
