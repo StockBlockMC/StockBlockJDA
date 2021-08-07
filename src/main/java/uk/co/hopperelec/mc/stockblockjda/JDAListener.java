@@ -29,8 +29,8 @@ public final class JDAListener extends ListenerAdapter {
     ServerInfo dSMPServer;
     ProxyServer proxyServer;
     String embedFooter = "Made by hopperelec#3060";
-    LinkedHashMap<Pattern,String> discordToMinecraftPatterns = new LinkedHashMap<>();
-    Pattern removeResetPattern;
+    private final LinkedHashMap<Pattern,String> discordToMinecraftPatterns = new LinkedHashMap<>();
+    private Pattern removeResetPattern;
 
     public JDAListener(JDA jda) {
         this.jda = jda;
@@ -64,8 +64,8 @@ public final class JDAListener extends ListenerAdapter {
     }
 
     public String discordToMinecraftFormat(String discordMsg) {
-        for (Map.Entry<Pattern,String> entry : discordToMinecraftPatterns.entrySet()) discordMsg = entry.getKey().matcher(discordMsg).replaceAll(entry.getValue());
-        return discordMsg;
+        for (Map.Entry<Pattern,String> entry : discordToMinecraftPatterns.entrySet()) discordMsg = entry.getKey().matcher(discordMsg).replaceAll("§"+entry.getValue()+"$1§r");
+        return removeResetPattern.matcher(discordMsg).replaceAll("§r");
     }
 
     public String getDiscordName(User user) {
