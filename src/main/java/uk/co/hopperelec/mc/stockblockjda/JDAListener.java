@@ -31,9 +31,11 @@ public final class JDAListener extends ListenerAdapter {
     String embedFooter = "Made by hopperelec#3060";
     private final LinkedHashMap<Pattern,String> discordToMinecraftPatterns = new LinkedHashMap<>();
     private Pattern removeResetPattern;
+    DiscordToMinecraftMessageSender discordToMinecraftMessageSender;
 
-    public JDAListener(JDA jda) {
+    public JDAListener(JDA jda, DiscordToMinecraftMessageSender discordToMinecraftMessageSender) {
         this.jda = jda;
+        this.discordToMinecraftMessageSender = discordToMinecraftMessageSender;
     }
 
     @Override
@@ -125,7 +127,10 @@ public final class JDAListener extends ListenerAdapter {
                     .event(new ClickEvent(ClickEvent.Action.OPEN_URL, attachment.getUrl()));
         }
 
-        for (ProxiedPlayer player : players) player.sendMessage(text.create());
+        BaseComponent[] textToSend = text.create();
+        for (ProxiedPlayer player : players) {
+            if (!discordToMinecraftMessageSender.blacklistedReceivingPlayers.contains(player)) player.sendMessage(textToSend);
+        }
     }
 
     @Override
@@ -139,15 +144,9 @@ public final class JDAListener extends ListenerAdapter {
         if (!(messageType == MessageType.DEFAULT || messageType == MessageType.INLINE_REPLY)) return;
 
         switch (rawContent) {
-            case "!dynmap":
-                event.getTextChannel().sendMessage("https://dynmap.hopperelec.co.uk/").queue();
-                break;
-
-            case "!ip":
-                event.getTextChannel().sendMessage("mc.hopperelec.co.uk").queue();
-                break;
-
-            case "!players": {
+            case "!dynmap" -> event.getTextChannel().sendMessage("https://dynmap.hopperelec.co.uk/").queue();
+            case "!ip" -> event.getTextChannel().sendMessage("mc.hopperelec.co.uk").queue();
+            case "!players" -> {
                 final EmbedBuilder embed = new EmbedBuilder();
                 embed.setFooter(embedFooter);
                 final Map<String, ServerInfo> servers = proxyServer.getServers();
@@ -161,7 +160,8 @@ public final class JDAListener extends ListenerAdapter {
                             String players;
                             if (err == null) {
                                 players = servers.get(serverName).getPlayers().toString();
-                                if (players.length() > 5) players = players.substring(1, players.length() - 1).replaceAll("_", "\\\\_");
+                                if (players.length() > 5)
+                                    players = players.substring(1, players.length() - 1).replaceAll("_", "\\\\_");
                                 else players = "None";
                             } else players = "Offline";
 
@@ -172,15 +172,13 @@ public final class JDAListener extends ListenerAdapter {
                 }
 
                 cf.thenAcceptAsync(unused -> event.getTextChannel().sendMessageEmbeds(embed.build()).queue());
-                break;
             }
-
-            default: {
+            default -> {
                 final Message msg = event.getMessage();
                 final Collection<ProxiedPlayer> players;
                 if (event.getChannel().getIdLong() == 782748045200326667L) players = dSMPServer.getPlayers();
                 else players = proxyServer.getPlayers();
-                sendMinecraftMessage(msg.getReferencedMessage(),event.getAuthor(),msg.getContentDisplay(),msg.getJumpUrl(),players,event.getMessage().getAttachments());
+                sendMinecraftMessage(msg.getReferencedMessage(), event.getAuthor(), msg.getContentDisplay(), msg.getJumpUrl(), players, event.getMessage().getAttachments());
             }
         }
 

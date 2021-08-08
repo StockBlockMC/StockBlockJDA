@@ -29,7 +29,6 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.logging.Level;
@@ -61,7 +60,9 @@ public final class BungeeListener extends Plugin implements Listener {
             return;
         }
 
-        jdaListener = new JDAListener(jda);
+        DiscordToMinecraftMessageSender discordToMinecraftMessageSender = new DiscordToMinecraftMessageSender();
+        getProxy().getPluginManager().registerCommand(this,discordToMinecraftMessageSender);
+        jdaListener = new JDAListener(jda,discordToMinecraftMessageSender);
         jda.addEventListener(jdaListener);
 
         getProxy().getPluginManager().registerListener(this, this);
@@ -154,21 +155,15 @@ public final class BungeeListener extends Plugin implements Listener {
 
         final String title;
         switch (msg[0]) {
-            case "death":
-                title = msg[1];
-                break;
-
-            case "advancement":
-                title = msg[1]+" made advancement "+msg[2];
-                break;
-
-            case "detectionArea":
+            case "death" -> title = msg[1];
+            case "advancement" -> title = msg[1] + " made advancement " + msg[2];
+            case "detectionArea" -> {
                 final Member member = jdaListener.dSMPGuild.retrieveMemberById(privateMessageChannels.get(msg[2])).complete();
-                if (member != null) member.getUser().openPrivateChannel().flatMap(channel -> channel.sendMessage(msg[3]+" entered your "+msg[1])).queue();
+                if (member != null)
+                    member.getUser().openPrivateChannel().flatMap(channel -> channel.sendMessage(msg[3] + " entered your " + msg[1])).queue();
                 return;
-
-            default:
-                title = "Received message on tag StockBlockJDA with unknown prefix '"+msg[0]+"'";
+            }
+            default -> title = "Received message on tag StockBlockJDA with unknown prefix '" + msg[0] + "'";
         }
 
         if (title == null) return;
