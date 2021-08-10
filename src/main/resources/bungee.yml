@@ -1,5 +1,5 @@
 name: StockBlockJDA
 version: ${project.version}
-main: uk.co.hopperelec.mc.stockblockjda.BungeeListener
+main: uk.co.hopperelec.mc.stockblockjda.StockBlockJDA
 description: Discord bot for StockBlock
 author: HopperElecYT

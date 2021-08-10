@@ -8,8 +8,8 @@ import net.md_5.bungee.api.plugin.Command;
 import java.util.ArrayList;
 import java.util.List;
 
-public class DiscordToMinecraftMessageSender extends Command {
-    public List<ProxiedPlayer> blacklistedReceivingPlayers = new ArrayList<>();
+public final class DiscordToMinecraftMessageSender extends Command {
+    private final List<ProxiedPlayer> blacklistedReceivingPlayers = new ArrayList<>();
 
     public DiscordToMinecraftMessageSender() {
         super("togglediscord");
@@ -25,5 +25,9 @@ public class DiscordToMinecraftMessageSender extends Command {
                 player.sendMessage(new TextComponent("You will no longer receive Discord messages"));
             }
         }
+    }
+
+    public boolean isBlacklisted(ProxiedPlayer player) {
+        return blacklistedReceivingPlayers.contains(player);
     }
 }

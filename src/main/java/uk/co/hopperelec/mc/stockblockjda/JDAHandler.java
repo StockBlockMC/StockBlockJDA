@@ -2,55 +2,83 @@ package uk.co.hopperelec.mc.stockblockjda;
 
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.*;
 import net.dv8tion.jda.api.events.ReadyEvent;
 import net.dv8tion.jda.api.events.interaction.ButtonClickEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.interactions.components.Button;
+import net.dv8tion.jda.api.requests.restaction.MessageAction;
+import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import net.md_5.bungee.api.ChatColor;
-import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.chat.*;
 import net.md_5.bungee.api.chat.hover.content.Text;
 import net.md_5.bungee.api.config.ServerInfo;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
+import net.md_5.bungee.api.plugin.Plugin;
 import org.jetbrains.annotations.NotNull;
 
+import javax.security.auth.login.LoginException;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
-public final class JDAListener extends ListenerAdapter {
-    JDA jda;
-    Guild stockblockGuild;
-    Guild dSMPGuild;
-    public MessageChannel stockblockGuildChannel;
-    public MessageChannel dSMPGuildChannel;
-    ServerInfo dSMPServer;
-    ProxyServer proxyServer;
-    String embedFooter = "Made by hopperelec#3060";
-    private final LinkedHashMap<Pattern,String> discordToMinecraftPatterns = new LinkedHashMap<>();
+final class JDAHandler extends ListenerAdapter {
+    private JDA jda;
+    private final StockBlockJDA plugin;
+    private MessageChannel stockblockGuildChannel;
+    private MessageChannel dSMPGuildChannel;
     private Pattern removeResetPattern;
-    DiscordToMinecraftMessageSender discordToMinecraftMessageSender;
+    private final LinkedHashMap<Pattern,String> discordToMinecraftPatterns = new LinkedHashMap<>();
+    private final Map<String, User> uuidToUser = new HashMap<>();
+    private final String[] joinButtons = {"Hey","Yoo","Hi","Hello","Welcome"};
+    private final String embedFooter = "Made by hopperelec#3060";
 
-    public JDAListener(JDA jda, DiscordToMinecraftMessageSender discordToMinecraftMessageSender) {
-        this.jda = jda;
-        this.discordToMinecraftMessageSender = discordToMinecraftMessageSender;
+    JDAHandler(StockBlockJDA plugin) {
+        this.plugin = plugin;
+    }
+
+    void shutdown() {
+        jda.shutdown();
+    }
+
+    void setup(Plugin plugin) throws LoginException {
+        final JDABuilder builder;
+        try {
+            builder = JDABuilder.createDefault(Files.readString(Paths.get(plugin.getDataFolder().toString(),"token")));
+        } catch (IOException e) {
+            throw new LoginException("Please create a 'token' file in this plugin's directory (StockBlockJDA) containing only the token of the Discord bot");
+        }
+        builder.setActivity(Activity.playing("on Demonetized SMP"));
+        builder.disableCache(CacheFlag.EMOTE, CacheFlag.ONLINE_STATUS, CacheFlag.VOICE_STATE);
+
+        jda = builder.build();
+        jda.addEventListener(this);
     }
 
     @Override
     public void onReady(@NotNull ReadyEvent event) {
-        stockblockGuild = jda.getGuildById(847254345267281960L);
+        final Guild stockblockGuild = jda.getGuildById(847254345267281960L);
         if (stockblockGuild != null) stockblockGuildChannel = stockblockGuild.getTextChannelById(868639327884828722L);
-        else System.out.println("Failed to obtain StockBlock guild!");
-        dSMPGuild = jda.getGuildById(782748045200326667L);
+        else throw new NullPointerException("Failed to obtain StockBlock guild!");
+        final Guild dSMPGuild = jda.getGuildById(782748045200326667L);
         if (dSMPGuild != null) dSMPGuildChannel = dSMPGuild.getTextChannelById(868639078638309417L);
-        else System.out.println("Failed to obtain Demonetized SMP guild!");
+        else throw new NullPointerException("Failed to obtain Demonetized SMP guild!");
 
-        proxyServer = ProxyServer.getInstance();
-        dSMPServer = proxyServer.getServers().get("dSMP");
+        final Map<String, Long> uuidToDiscordID = new HashMap<>();
+        uuidToDiscordID.put("4ee1cc2f-f517-4aee-8f74-7f3f36be22d8",348083986989449216L);
+        uuidToDiscordID.put("eac2f553-d4ac-412a-a581-0324b57463af",264519033188122625L);
+        for (String uuid : uuidToDiscordID.keySet()) {
+            final Member member = dSMPGuild.retrieveMemberById(uuidToDiscordID.get(uuid)).complete();
+            if (member != null) uuidToUser.put(uuid,member.getUser());
+        }
 
-        EmbedBuilder embed = new EmbedBuilder();
+        final EmbedBuilder embed = new EmbedBuilder();
         embed.setTitle("Network is back online");
         embed.setColor(0x00ff00);
         embed.setFooter("Made by hopperelec#3060");
@@ -65,12 +93,12 @@ public final class JDAListener extends ListenerAdapter {
         removeResetPattern = Pattern.compile("(§r)+");
     }
 
-    public String discordToMinecraftFormat(String discordMsg) {
+    private String discordToMinecraftFormat(String discordMsg) {
         for (Map.Entry<Pattern,String> entry : discordToMinecraftPatterns.entrySet()) discordMsg = entry.getKey().matcher(discordMsg).replaceAll("§"+entry.getValue()+"$1§r");
         return removeResetPattern.matcher(discordMsg).replaceAll("§r");
     }
 
-    public String getDiscordName(User user) {
+    private String getDiscordName(User user) {
         return user.getName()+"#"+user.getDiscriminator();
     }
 
@@ -78,22 +106,22 @@ public final class JDAListener extends ListenerAdapter {
     public void onButtonClick(ButtonClickEvent event) {
         if (event.getMessage() == null) event.reply("Failed processing button event!").queue();
         else {
-            String[] data = event.getComponentId().split("-");
+            final String[] data = event.getComponentId().split("-");
             event.reply(getDiscordName(event.getUser())+" sent message '"+data[0]+"'").queue();
-            sendMinecraftMessage(null,event.getUser(),data[0],event.getMessage().getJumpUrl(),proxyServer.getServers().get(data[1]).getPlayers(),new ArrayList<>());
+            sendMinecraftMessage(null,event.getUser(),data[0],event.getMessage().getJumpUrl(),plugin.bungeeHandler.proxyServer.getServers().get(data[1]).getPlayers(),new ArrayList<>());
         }
     }
 
-    public void sendMinecraftMessage(Message reply, User author, String message, String jumpUrl, Collection<ProxiedPlayer> players, List<Message.Attachment> attachments) {
-        ComponentBuilder text = new ComponentBuilder("Discord ").color(ChatColor.DARK_AQUA)
+    private void sendMinecraftMessage(Message reply, User author, String message, String jumpUrl, Collection<ProxiedPlayer> players, List<Message.Attachment> attachments) {
+        final ComponentBuilder text = new ComponentBuilder("Discord ").color(ChatColor.DARK_AQUA)
                 .append(getDiscordName(author)).color(ChatColor.GREEN);
 
         if (reply != null) {
-            String replyTitle;
+            final String replyTitle;
             String replyAuthor = getDiscordName(reply.getAuthor());
             if (replyAuthor.equals("StockBlock#3858")) {
-                MessageEmbed embed = reply.getEmbeds().get(0);
-                MessageEmbed.AuthorInfo authorInfo = embed.getAuthor();
+                final MessageEmbed embed = reply.getEmbeds().get(0);
+                final MessageEmbed.AuthorInfo authorInfo = embed.getAuthor();
                 if (authorInfo == null) replyAuthor = "StockBlock bot";
                 else replyAuthor = embed.getAuthor().getName();
                 replyTitle = embed.getTitle();
@@ -105,8 +133,8 @@ public final class JDAListener extends ListenerAdapter {
         }
         text.append(": ").color(ChatColor.WHITE);
 
-        String msg = discordToMinecraftFormat(message);
-        String[] msgSpoilerSplits = msg.split("\\|\\|");
+        final String msg = discordToMinecraftFormat(message);
+        final String[] msgSpoilerSplits = msg.split("\\|\\|");
         if (msgSpoilerSplits.length > 1) {
             ComponentBuilder msgText = new ComponentBuilder(msgSpoilerSplits[0]);
             for (int i = 1; i < msgSpoilerSplits.length; i++) {
@@ -129,7 +157,7 @@ public final class JDAListener extends ListenerAdapter {
 
         BaseComponent[] textToSend = text.create();
         for (ProxiedPlayer player : players) {
-            if (!discordToMinecraftMessageSender.blacklistedReceivingPlayers.contains(player)) player.sendMessage(textToSend);
+            if (!plugin.isBlacklisted.op(player)) player.sendMessage(textToSend);
         }
     }
 
@@ -149,7 +177,7 @@ public final class JDAListener extends ListenerAdapter {
             case "!players" -> {
                 final EmbedBuilder embed = new EmbedBuilder();
                 embed.setFooter(embedFooter);
-                final Map<String, ServerInfo> servers = proxyServer.getServers();
+                final Map<String, ServerInfo> servers = plugin.bungeeHandler.proxyServer.getServers();
                 final CompletableFuture<Void> cf = new CompletableFuture<>();
                 final AtomicInteger counter = new AtomicInteger();
                 final Object mutex = new Object();
@@ -176,11 +204,39 @@ public final class JDAListener extends ListenerAdapter {
             default -> {
                 final Message msg = event.getMessage();
                 final Collection<ProxiedPlayer> players;
-                if (event.getChannel().getIdLong() == 782748045200326667L) players = dSMPServer.getPlayers();
-                else players = proxyServer.getPlayers();
+                if (event.getChannel().getIdLong() == 782748045200326667L) players = plugin.bungeeHandler.proxyServer.getServerInfo("dSMP").getPlayers();
+                else players = plugin.bungeeHandler.proxyServer.getPlayers();
                 sendMinecraftMessage(msg.getReferencedMessage(), event.getAuthor(), msg.getContentDisplay(), msg.getJumpUrl(), players, event.getMessage().getAttachments());
             }
         }
+    }
 
+    MessageAction sendToStockBlockGuild(MessageEmbed embed) {
+        return stockblockGuildChannel.sendMessageEmbeds(embed);
+    }
+
+    MessageAction sendTodSMPGuild(MessageEmbed embed) {
+        return dSMPGuildChannel.sendMessageEmbeds(embed);
+    }
+
+    MessageAction sendToStockBlockGuild(EmbedBuilder embed) {
+        embed.setFooter(embedFooter);
+        return sendToStockBlockGuild(embed.build());
+    }
+
+    MessageAction sendTodSMPGuild(EmbedBuilder embed) {
+        embed.setFooter(embedFooter);
+        return sendTodSMPGuild(embed.build());
+    }
+
+    List<Button> getJoinButtons(String playername, String serverName) {
+        final List<Button> buttons = new ArrayList<>();
+        final String suffix = " "+playername+"!"+"-"+serverName;
+        for (String joinButton : joinButtons) buttons.add(Button.secondary(joinButton+suffix,joinButton));
+        return buttons;
+    }
+
+    User getUserFromUUID(String uuid) {
+        return uuidToUser.get(uuid);
     }
 }
