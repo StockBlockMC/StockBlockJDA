@@ -11,9 +11,6 @@ import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.components.Button;
 import net.dv8tion.jda.api.requests.restaction.MessageAction;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
-import net.md_5.bungee.api.ChatColor;
-import net.md_5.bungee.api.chat.*;
-import net.md_5.bungee.api.chat.hover.content.Text;
 import net.md_5.bungee.api.config.ServerInfo;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.plugin.Plugin;
@@ -26,15 +23,12 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Pattern;
 
 final class JDAHandler extends ListenerAdapter {
     private JDA jda;
-    private final StockBlockJDA plugin;
     private MessageChannel stockblockGuildChannel;
     private MessageChannel dSMPGuildChannel;
-    private Pattern removeResetPattern;
-    private final LinkedHashMap<Pattern,String> discordToMinecraftPatterns = new LinkedHashMap<>();
+    private final StockBlockJDA plugin;
     private final Map<String, User> uuidToUser = new HashMap<>();
     private final String[] joinButtons = {"Hey","Yoo","Hi","Hello","Welcome"};
     private final String embedFooter = "Made by hopperelec#3060";
@@ -56,7 +50,6 @@ final class JDAHandler extends ListenerAdapter {
         }
         builder.setActivity(Activity.playing("on Demonetized SMP"));
         builder.disableCache(CacheFlag.EMOTE, CacheFlag.ONLINE_STATUS, CacheFlag.VOICE_STATE);
-
         jda = builder.build();
         jda.addEventListener(this);
     }
@@ -84,21 +77,9 @@ final class JDAHandler extends ListenerAdapter {
         embed.setFooter("Made by hopperelec#3060");
         stockblockGuildChannel.sendMessage("<@&868872369631019049>").setEmbeds(embed.build()).queue();
         dSMPGuildChannel.sendMessage("<@&868703367688519761>").setEmbeds(embed.build()).queue();
-
-        discordToMinecraftPatterns.put(Pattern.compile("\\*\\*(.*?)\\*\\*"), "l");
-        discordToMinecraftPatterns.put(Pattern.compile("\\*(.*?)\\*"), "o");
-        discordToMinecraftPatterns.put(Pattern.compile("__(.*?)__"), "n");
-        discordToMinecraftPatterns.put(Pattern.compile("~~(.*?)~~"), "m");
-        discordToMinecraftPatterns.put(Pattern.compile("`(.*?)`"), "7");
-        removeResetPattern = Pattern.compile("(§r)+");
     }
 
-    private String discordToMinecraftFormat(String discordMsg) {
-        for (Map.Entry<Pattern,String> entry : discordToMinecraftPatterns.entrySet()) discordMsg = entry.getKey().matcher(discordMsg).replaceAll("§"+entry.getValue()+"$1§r");
-        return removeResetPattern.matcher(discordMsg).replaceAll("§r");
-    }
-
-    private String getDiscordName(User user) {
+    static String getDiscordName(User user) {
         return user.getName()+"#"+user.getDiscriminator();
     }
 
@@ -108,56 +89,11 @@ final class JDAHandler extends ListenerAdapter {
         else {
             final String[] data = event.getComponentId().split("-");
             event.reply(getDiscordName(event.getUser())+" sent message '"+data[0]+"'").queue();
-            sendMinecraftMessage(null,event.getUser(),data[0],event.getMessage().getJumpUrl(),plugin.bungeeHandler.proxyServer.getServers().get(data[1]).getPlayers(),new ArrayList<>());
-        }
-    }
-
-    private void sendMinecraftMessage(Message reply, User author, String message, String jumpUrl, Collection<ProxiedPlayer> players, List<Message.Attachment> attachments) {
-        final ComponentBuilder text = new ComponentBuilder("Discord ").color(ChatColor.DARK_AQUA)
-                .append(getDiscordName(author)).color(ChatColor.GREEN);
-
-        if (reply != null) {
-            final String replyTitle;
-            String replyAuthor = getDiscordName(reply.getAuthor());
-            if (replyAuthor.equals("StockBlock#3858")) {
-                final MessageEmbed embed = reply.getEmbeds().get(0);
-                final MessageEmbed.AuthorInfo authorInfo = embed.getAuthor();
-                if (authorInfo == null) replyAuthor = "StockBlock bot";
-                else replyAuthor = embed.getAuthor().getName();
-                replyTitle = embed.getTitle();
-            } else replyTitle = discordToMinecraftFormat(reply.getContentDisplay());
-
-            text.append(" (replying to " + replyAuthor + ")").color(ChatColor.GRAY)
-                    .event(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text(replyTitle)))
-                    .event(new ClickEvent(ClickEvent.Action.OPEN_URL, reply.getJumpUrl()));
-        }
-        text.append(": ").color(ChatColor.WHITE);
-
-        final String msg = discordToMinecraftFormat(message);
-        final String[] msgSpoilerSplits = msg.split("\\|\\|");
-        if (msgSpoilerSplits.length > 1) {
-            ComponentBuilder msgText = new ComponentBuilder(msgSpoilerSplits[0]);
-            for (int i = 1; i < msgSpoilerSplits.length; i++) {
-                if (i % 2 == 0) msgText.append(msgSpoilerSplits[i]).color(ChatColor.WHITE);
-                else msgText.append("[SPOILER]").color(ChatColor.DARK_GRAY)
-                        .event(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text(msgSpoilerSplits[i])));
-            }
-            text.append(msgText.create())
-                    .event(new ClickEvent(ClickEvent.Action.OPEN_URL, jumpUrl));
-        } else text.append(msg);
-
-        String mediaType;
-        for (Message.Attachment attachment : attachments) {
-            if (attachment.isImage()) mediaType = "Image";
-            else mediaType = "Video";
-            text.append(" ").append(mediaType).color(ChatColor.BLUE).underlined(true)
-                    .event(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new Text(attachment.getUrl())))
-                    .event(new ClickEvent(ClickEvent.Action.OPEN_URL, attachment.getUrl()));
-        }
-
-        BaseComponent[] textToSend = text.create();
-        for (ProxiedPlayer player : players) {
-            if (!plugin.isBlacklisted.op(player)) player.sendMessage(textToSend);
+            plugin.discordToMinecraftMessageSender.sendMinecraftMessage(null, event.getUser(),
+                    data[0],event.getMessage().getJumpUrl(),
+                    plugin.bungeeHandler.proxyServer.getServers().get(data[1]).getPlayers(),
+                    new ArrayList<>()
+            );
         }
     }
 
@@ -206,7 +142,7 @@ final class JDAHandler extends ListenerAdapter {
                 final Collection<ProxiedPlayer> players;
                 if (event.getChannel().getIdLong() == 782748045200326667L) players = plugin.bungeeHandler.proxyServer.getServerInfo("dSMP").getPlayers();
                 else players = plugin.bungeeHandler.proxyServer.getPlayers();
-                sendMinecraftMessage(msg.getReferencedMessage(), event.getAuthor(), msg.getContentDisplay(), msg.getJumpUrl(), players, event.getMessage().getAttachments());
+                plugin.discordToMinecraftMessageSender.sendMinecraftMessage(msg.getReferencedMessage(), event.getAuthor(), msg.getContentDisplay(), msg.getJumpUrl(), players, event.getMessage().getAttachments());
             }
         }
     }
